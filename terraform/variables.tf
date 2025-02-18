@@ -39,3 +39,11 @@ variable "queue_name" {
   type = string
 }
 
+variable "face_cutting_func_name" {
+  description = "Назание ф-ции face_cutting"
+  type = string
+}
+
+variable "faces_bucket" {
+  description = "Бакет фотографий лиц"
+}

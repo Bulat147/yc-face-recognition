@@ -40,6 +40,15 @@ resource "yandex_storage_bucket" "photos_bucket" {
   secret_key           = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
 }
 
+resource "yandex_storage_bucket" "faces_bucket" {
+  bucket               = var.faces_bucket
+  acl                  = "private"
+  default_storage_class = "standard"
+  max_size             = 5368709120
+  access_key           = yandex_iam_service_account_static_access_key.sa_static_key.access_key
+  secret_key           = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
+}
+
 // Загрузим фотографию в наш бакет
 resource "yandex_storage_object" "photo_object" {
   bucket = yandex_storage_bucket.photos_bucket.bucket
@@ -47,6 +56,8 @@ resource "yandex_storage_object" "photo_object" {
   source = "../tgbot/faces.jpg"
   access_key           = yandex_iam_service_account_static_access_key.sa_static_key.access_key
   secret_key           = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
+
+  depends_on = [yandex_function_trigger.photo_trigger]
 }
 
 resource "yandex_function" "face_detection" {
@@ -65,6 +76,26 @@ resource "yandex_function" "face_detection" {
     QUEUE_NAME = yandex_message_queue.tasks_queue.name
   }
 }
+
+resource "yandex_function" "face_cutting" {
+  name               = var.face_cutting_func_name
+  entrypoint         = "face_cutting.handle_event"
+  memory             = "512"
+  runtime            = "python312"
+  service_account_id = var.sa_account
+  user_hash          =  archive_file.zip.output_sha256
+  content {
+    zip_filename = archive_file.zip.output_path
+  }
+  environment = {
+    ACCESS_KEY      = yandex_iam_service_account_static_access_key.sa_static_key.access_key
+    SECRET_KEY      = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
+    QUEUE_NAME = yandex_message_queue.tasks_queue.name
+    PHOTO_BUCKET_NAME = yandex_storage_bucket.photos_bucket.bucket
+    FACE_BUCKET_NAME = yandex_storage_bucket.faces_bucket.bucket
+  }
+}
+
 
 resource "archive_file" "zip" {
   type        = "zip"
@@ -94,5 +125,24 @@ resource "yandex_function_trigger" "photo_trigger" {
     bucket_id = yandex_storage_bucket.photos_bucket.id
     suffix    = ".jpg"
     create    = true
+  }
+}
+
+# Триггер для задач
+resource "yandex_function_trigger" "task_trigger" {
+  name        = "vvot29-task"
+
+  function {
+    id                 = yandex_function.face_cutting.id
+    service_account_id = var.sa_account
+    retry_attempts     = 3
+    retry_interval     = 30
+  }
+
+  message_queue {
+    queue_id           = yandex_message_queue.tasks_queue.arn
+    service_account_id = var.sa_account
+    batch_cutoff       = "10"
+    batch_size         = "1"
   }
 }

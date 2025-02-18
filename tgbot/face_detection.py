@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-from email import message_from_bytes
 
 import boto3
 import cv2
@@ -60,7 +59,7 @@ def detect_faces(data):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # Само распознавание
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
     return [list(map(int, face)) for face in faces]
 
 def handle_event(event, context):
@@ -76,7 +75,7 @@ def handle_event(event, context):
 
     for face_rectangle in rectangle_arr:
         message = {
-            "source_key": object_key,
+            "object_key": object_key,
             "face_rectangle": face_rectangle
         }
 
