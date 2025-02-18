@@ -26,7 +26,7 @@ resource "yandex_resourcemanager_folder_iam_member" "adm_function_invoker_iam" {
   member    = "serviceAccount:${var.sa_account}"
 }
 
-// создаим static key для сервисного аккаунта, чтобы юзать для бакета
+// создаим static key (IAM) для сервисного аккаунта, чтобы юзать для бакета
 resource "yandex_iam_service_account_static_access_key" "sa_static_key" {
   service_account_id = var.sa_account
 }
@@ -47,4 +47,52 @@ resource "yandex_storage_object" "photo_object" {
   source = "../tgbot/faces.jpg"
   access_key           = yandex_iam_service_account_static_access_key.sa_static_key.access_key
   secret_key           = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
+}
+
+resource "yandex_function" "face_detection" {
+  name               = var.face_detection_func_name
+  entrypoint         = "face_detection.handle_event"
+  memory             = "512"
+  runtime            = "python312"
+  service_account_id = var.sa_account
+  user_hash          =  archive_file.zip.output_sha256
+  content {
+    zip_filename = archive_file.zip.output_path
+  }
+  environment = {
+    ACCESS_KEY      = yandex_iam_service_account_static_access_key.sa_static_key.access_key
+    SECRET_KEY      = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
+    QUEUE_NAME = yandex_message_queue.tasks_queue.name
+  }
+}
+
+resource "archive_file" "zip" {
+  type        = "zip"
+  source_dir  = "../tgbot"
+  output_path = "../bot.zip"
+}
+
+# Очередь сообщений для задач
+resource "yandex_message_queue" "tasks_queue" {
+  name        = var.queue_name
+  access_key  = yandex_iam_service_account_static_access_key.sa_static_key.access_key
+  secret_key  = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
+}
+
+# Триггер для face-detection
+resource "yandex_function_trigger" "photo_trigger" {
+  name        = "vvot29-photo"
+
+  // ф-ция для вызова при событии
+  function {
+    id                 = yandex_function.face_detection.id
+    service_account_id = var.sa_account
+  }
+
+  // событие триггера - изменение в баккете с файлами .jpg, а именно операция create
+  object_storage {
+    bucket_id = yandex_storage_bucket.photos_bucket.id
+    suffix    = ".jpg"
+    create    = true
+  }
 }

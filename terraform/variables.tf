@@ -29,3 +29,13 @@ variable "tg_bot_key" {
   sensitive   = true
 }
 
+variable "face_detection_func_name" {
+  description = "Название ф-ции face_detection"
+  type = string
+}
+
+variable "queue_name" {
+  description = "Название очереди"
+  type = string
+}
+
