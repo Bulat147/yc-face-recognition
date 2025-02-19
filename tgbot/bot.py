@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+from json import JSONEncoder
 
 import boto3
 import requests
@@ -37,18 +38,18 @@ class TgHelper:
     def send_telegram_media_group(self, chat_id, photo_urls, reply_to_message_id=None):
         url = f"{self.telegram_api_url}/sendMediaGroup"
 
-        media = [{"type": "photo", "media": url} for url in photo_urls]
+        media = [{"type": "photo", "media": photo_url} for photo_url in photo_urls]
 
         payload = {
             "chat_id": chat_id,
             "media": media
         }
+
         if reply_to_message_id:
-            payload["reply_parameters"] = {"message_id": reply_to_message_id}
+            payload["reply_to_message_id"] = reply_to_message_id
 
         try:
-            logging.error(media)
-            response = requests.post(url=url, json=payload)
+            response = requests.post(url, json=payload)
             if response.status_code == 200:
                 logging.info(f"Медиагруппа успешно отправлена в чат '{chat_id}'.")
             else:
@@ -210,7 +211,11 @@ def process_message(message):
             )
             return
         media_urls = [f"{API_GW_URL}/originals/{photo}" for photo in original_photos]
-        tg_helper.send_telegram_media_group(chat_id, media_urls, message_id)
+
+        if len(media_urls) > 1:
+            tg_helper.send_telegram_media_group(chat_id, media_urls, message_id)
+        else:
+            tg_helper.send_telegram_message(chat_id, media_urls[0], message_id)
 
     else:
         tg_helper.send_telegram_message(

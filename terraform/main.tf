@@ -163,7 +163,6 @@ paths:
       x-yc-apigateway-integration:
         type: "object-storage"
         bucket: "${yandex_storage_bucket.photos_bucket.bucket}"
-        сontent_type: "image/jpeg"
         object: "{photo}"
         service_account_id: "${var.sa_account}"
       responses:
