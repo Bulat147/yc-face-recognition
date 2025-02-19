@@ -96,6 +96,85 @@ resource "yandex_function" "face_cutting" {
   }
 }
 
+resource "yandex_function" "bot" {
+  name               = var.bot_func_name
+  entrypoint         = "bot.handler"
+  memory             = "128"
+  runtime            = "python312"
+  service_account_id = var.sa_account
+  user_hash          = archive_file.zip.output_sha256
+  content {
+    zip_filename = archive_file.zip.output_path
+  }
+  environment = {
+    TELEGRAM_BOT_TOKEN = var.tg_bot_key
+    ACCESS_KEY         = yandex_iam_service_account_static_access_key.sa_static_key.access_key
+    SECRET_KEY         = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
+    FACES_BUCKET       = var.faces_bucket
+    PHOTOS_BUCKET=var.photos_bucket
+  }
+}
+
+// Делаем ф-цию bot публичной
+resource "yandex_function_iam_binding" "bot-function-iam" {
+  function_id = yandex_function.bot.id
+  role        = "functions.functionInvoker"
+  members = [
+    "system:allUsers",
+  ]
+}
+
+resource "yandex_api_gateway" "api_gw" {
+  name = var.api_gw_name
+  spec = <<EOT
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Faces API
+paths:
+  /:
+    get:
+      summary: "Get face"
+      parameters:
+        - name: "face"
+          in: "query"
+          required: true
+          schema:
+            type: "string"
+      x-yc-apigateway-integration:
+        type: "object-storage"
+        bucket: "${yandex_storage_bucket.faces_bucket.bucket}"
+        object: "{face}"
+        service_account_id: "${var.sa_account}"
+      responses:
+        '200':
+          description: "Image found"
+        '404':
+          description: "Image not found"
+EOT
+}
+
+
+// Ставим вебхук
+resource "null_resource" "set_tg_webhook" {
+  provisioner "local-exec" {
+    command = "curl 'https://api.telegram.org/bot${var.tg_bot_key}/setWebhook?url=https://functions.yandexcloud.net/${yandex_function.bot.id}'"
+  }
+
+  depends_on = [yandex_function.bot]
+}
+
+// Убираем вебхук
+resource "null_resource" "delete_tf_webhook" {
+  triggers = {
+    tg_token = var.tg_bot_key
+  }
+
+  provisioner "local-exec" {
+    when = destroy
+    command = "curl 'https://api.telegram.org/bot${self.triggers.tg_token}/deleteWebhook'"
+  }
+}
 
 resource "archive_file" "zip" {
   type        = "zip"

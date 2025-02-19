@@ -46,4 +46,15 @@ variable "face_cutting_func_name" {
 
 variable "faces_bucket" {
   description = "Бакет фотографий лиц"
+  type = string
+}
+
+variable "bot_func_name" {
+  description = "Название ф-ции bot"
+  type = string
+}
+
+variable "api_gw_name" {
+  description = "Название api gw"
+  type = string
 }
