@@ -110,8 +110,8 @@ resource "yandex_function" "bot" {
     TELEGRAM_BOT_TOKEN = var.tg_bot_key
     ACCESS_KEY         = yandex_iam_service_account_static_access_key.sa_static_key.access_key
     SECRET_KEY         = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
-    FACES_BUCKET       = var.faces_bucket
-    PHOTOS_BUCKET=var.photos_bucket
+    FACE_BUCKET_NAME       = var.faces_bucket
+    API_GW_URL = "https://${yandex_api_gateway.api_gw.domain}"
   }
 }
 
@@ -151,6 +151,29 @@ paths:
           description: "Image found"
         '404':
           description: "Image not found"
+  /originals/{photo}:
+    get:
+      summary: "Get photo from Object Storage"
+      parameters:
+        - name: "photo"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+      x-yc-apigateway-integration:
+        type: "object-storage"
+        bucket: "${yandex_storage_bucket.photos_bucket.bucket}"
+        сontent_type: "image/jpeg"
+        object: "{photo}"
+        service_account_id: "${var.sa_account}"
+      responses:
+        "200":
+          description: "Photo retrieved successfully"
+          content:
+            image/jpeg: {}
+            image/png: {}
+        "404":
+          description: "Photo not found"
 EOT
 }
 
